@@ -1,0 +1,11 @@
+{
+  "note": "Centerline responses recorded from one BISAR-PC 2.0 run of nrb1.inp. Four significant figures, as printed.",
+  "points": [
+    {"position": 1, "layer": 1, "z": 0.0, "uz": 1.399e-4, "sz": -7.000e5, "sr": -3.034e6, "ez": 4.069e-5, "er": -4.935e-5},
+    {"position": 2, "layer": 1, "z": 1.0e-3, "uz": 1.399e-4, "sz": -6.997e5, "sr": -2.931e6, "ez": 3.863e-5, "er": -4.744e-5},
+    {"position": 3, "layer": 1, "z": 2.5e-2, "uz": 1.403e-4, "sz": -5.574e5, "sr": -6.110e5, "ez": -3.706e-6, "er": -5.774e-6},
+    {"position": 4, "layer": 2, "z": 0.125, "uz": 1.324e-4, "sz": -1.431e5, "sr": 1.031e5, "ez": -7.687e-5, "er": 4.182e-5},
+    {"position": 5, "layer": 3, "z": 0.30, "uz": 1.149e-4, "sz": -2.035e4, "sr": 1.155e4, "ez": -9.480e-5, "er": 4.877e-5},
+    {"position": 6, "layer": 4, "z": 0.405, "uz": 1.057e-4, "sz": -1.215e4, "sr": 1.345e3, "ez": -1.309e-4, "er": 5.126e-5}
+  ]
+}
