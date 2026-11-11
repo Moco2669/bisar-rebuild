@@ -20,8 +20,9 @@ def test_one_position_block():
 
 
 @pytest.mark.skipif(not RECORDED.exists(), reason="recorded BISAR report is not on this machine")
-def test_recorded_report_has_six_centerline_points():
+def test_recorded_report_parses_the_saved_run():
     results = parse_report(RECORDED.read_text(encoding="latin-1"))
-    assert [item.position for item in results] == [1, 2, 3, 4, 5, 6]
-    assert results[0].stress.vertical == pytest.approx(-7.0e5, rel=1e-4)
-    assert results[5].displacement.vertical == pytest.approx(1.057e-4, rel=1e-3)
+    assert [item.position for item in results] == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert results[0].z == pytest.approx(0.3)
+    assert results[0].stress.vertical == pytest.approx(-2.812e4, rel=1e-3)
+    assert results[7].layer == 4

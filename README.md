@@ -9,8 +9,8 @@ py -m pip install -e ".[dev]"
 py -m pytest
 ```
 
-That run checks the bonded centerline against the recorded four-layer case.
+That run checks the bonded centerline and the recorded standard dual wheel.
 
-Milestones are in `docs/ROADMAP.md`. The current one is several vertical loads, including a standard dual wheel. Three agents share each milestone. Their prompts are in `agents/`, and the order they run is in `AGENTS.md`.
+Milestones are in `docs/ROADMAP.md`. The current one is a horizontal shear load and an interface with slip. Three agents share each milestone. Their prompts are in `agents/`, and the order they run is in `AGENTS.md`.
 
 The Shell manual and the original program stay in `D:\BISAR3` on the machine that has them. They are not part of this repository.

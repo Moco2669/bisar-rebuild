@@ -12,9 +12,9 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from scipy.special import j1, jn_zeros
+from scipy.special import j0, j1, jn, jn_zeros
 
-from bisar.model import Components, Layer, Load, PointResult, Problem, QueryPoint
+from bisar.model import Components, Layer, Load, PointResult, Problem, QueryPoint, Tensor, Vector3
 
 _BESSEL_ZEROS = jn_zeros(1, 240)
 _GAUSS_NODES, _GAUSS_WEIGHTS = np.polynomial.legendre.leggauss(24)
@@ -25,17 +25,30 @@ def solve(problem: Problem) -> tuple[PointResult, ...]:
         raise NotImplementedError("Interface slip is not implemented yet.")
     if any(load.shear_stress != 0.0 for load in problem.loads):
         raise NotImplementedError("Horizontal shear loads are not implemented yet.")
-    if any(_offset(point, load) > 1e-9 for point in problem.points for load in problem.loads):
-        raise NotImplementedError("Positions off the load axis are not implemented yet.")
 
-    totals = np.zeros((len(problem.points), 3))
+    count = len(problem.points)
+    displacement = np.zeros((count, 3))
+    stress = np.zeros((count, 6))
     for load in problem.loads:
-        totals += _axis_responses(problem.layers, load, problem.points)
+        on_axis = [index for index, point in enumerate(problem.points) if _offset(point, load) <= 1e-9]
+        off_axis = [index for index, point in enumerate(problem.points) if index not in on_axis]
+        if on_axis:
+            subset = tuple(problem.points[index] for index in on_axis)
+            for slot, values in zip(on_axis, _axis_responses(problem.layers, load, subset)):
+                vertical_disp, vertical_stress, radial_stress = values
+                displacement[slot, 2] += vertical_disp
+                stress[slot, 0] += radial_stress
+                stress[slot, 1] += radial_stress
+                stress[slot, 2] += vertical_stress
+        if off_axis:
+            subset = tuple(problem.points[index] for index in off_axis)
+            for slot, point, values in zip(off_axis, subset, _off_axis_responses(problem.layers, load, subset)):
+                _add_cylindrical(displacement[slot], stress[slot], point, load, values)
 
     results = []
-    for point, (vertical_disp, vertical_stress, radial_stress) in zip(problem.points, totals):
+    for point, disp, comp in zip(problem.points, displacement, stress):
         layer = problem.layers[point.layer - 1]
-        strain_z, strain_r = _hooke(layer, vertical_stress, radial_stress)
+        strain = _hooke_cartesian(layer, comp)
         results.append(
             PointResult(
                 position=point.number,
@@ -43,9 +56,12 @@ def solve(problem: Problem) -> tuple[PointResult, ...]:
                 x=point.x,
                 y=point.y,
                 z=point.z,
-                displacement=Components(0.0, 0.0, float(vertical_disp)),
-                stress=Components(float(radial_stress), float(radial_stress), float(vertical_stress)),
-                strain=Components(float(strain_r), float(strain_r), float(strain_z)),
+                displacement=Components(float(disp[0]), float(disp[1]), float(disp[2])),
+                stress=Components(float(comp[0]), float(comp[1]), float(comp[2])),
+                strain=Components(float(strain[0]), float(strain[1]), float(strain[2])),
+                total_displacement=Vector3(float(disp[0]), float(disp[1]), float(disp[2])),
+                total_stress=Tensor(*[float(item) for item in comp]),
+                total_strain=Tensor(*[float(item) for item in strain]),
             )
         )
     return tuple(results)
@@ -55,10 +71,44 @@ def _offset(point: QueryPoint, load: Load) -> float:
     return math.hypot(point.x - load.x, point.y - load.y)
 
 
-def _hooke(layer: Layer, stress_z: float, stress_r: float) -> tuple[float, float]:
-    strain_z = (stress_z - 2.0 * layer.poisson * stress_r) / layer.modulus
-    strain_r = ((1.0 - layer.poisson) * stress_r - layer.poisson * stress_z) / layer.modulus
-    return strain_z, strain_r
+def _hooke_cartesian(layer: Layer, stress: np.ndarray) -> np.ndarray:
+    xx, yy, zz, yz, xz, xy = (float(item) for item in stress)
+    modulus = layer.modulus
+    poisson = layer.poisson
+    shear = (1.0 + poisson) / modulus
+    return np.array(
+        [
+            (xx - poisson * (yy + zz)) / modulus,
+            (yy - poisson * (xx + zz)) / modulus,
+            (zz - poisson * (xx + yy)) / modulus,
+            shear * yz,
+            shear * xz,
+            shear * xy,
+        ]
+    )
+
+
+def _add_cylindrical(
+    displacement: np.ndarray,
+    stress: np.ndarray,
+    point: QueryPoint,
+    load: Load,
+    values: np.ndarray,
+) -> None:
+    """Rotate one load's cylindrical response into the fixed X-Y frame and add it."""
+    radial_disp, vertical_disp, radial_stress, tangential_stress, vertical_stress, shear = values
+    angle = math.atan2(point.y - load.y, point.x - load.x)
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    displacement[0] += radial_disp * cosine
+    displacement[1] += radial_disp * sine
+    displacement[2] += vertical_disp
+    stress[0] += radial_stress * cosine * cosine + tangential_stress * sine * sine
+    stress[1] += radial_stress * sine * sine + tangential_stress * cosine * cosine
+    stress[2] += vertical_stress
+    stress[3] += shear * sine
+    stress[4] += shear * cosine
+    stress[5] += (radial_stress - tangential_stress) * sine * cosine
 
 
 def _axis_responses(layers: tuple[Layer, ...], load: Load, points: tuple[QueryPoint, ...]) -> np.ndarray:
@@ -71,7 +121,7 @@ def _axis_responses(layers: tuple[Layer, ...], load: Load, points: tuple[QueryPo
     stack = _Stack(layers)
     surface = layers[0]
     half = _Stack((Layer(surface.modulus, surface.poisson, 0.0, 0.0),))
-    locations = [stack.locate(point.z) for point in points]
+    locations = [stack.location(point.layer, point.z) for point in points]
     half_locations = [(0, point.z) for point in points]
     acc = np.array(
         [
@@ -127,6 +177,58 @@ def _segment(
     return total
 
 
+def _off_axis_responses(layers: tuple[Layer, ...], load: Load, points: tuple[QueryPoint, ...]) -> np.ndarray:
+    """Return ur, uz, sr, st, sz, trz for points away from one load axis."""
+    stack = _Stack(layers)
+    locations = [stack.location(point.layer, point.z) for point in points]
+    radii = np.array([_offset(point, load) for point in points])
+    mus = np.array([float(stack.mu[layer]) for layer, _local_z in locations])
+    depth = min(max(point.z, 0.0) for point in points)
+    limit = 40.0 / max(depth, 1e-3)
+    scale = max(load.radius, float(np.max(radii)))
+    edges = np.concatenate(([0.0], _BESSEL_ZEROS / scale))
+    acc = np.zeros((len(points), 6))
+    for index in range(len(edges) - 1):
+        if edges[index] >= limit:
+            break
+        hi = min(float(edges[index + 1]), limit)
+        acc += _off_segment(stack, load, locations, radii, float(edges[index]), hi)
+    radial = 0.5 * acc[:, 4] - mus * acc[:, 5]
+    tangential = 0.5 * acc[:, 4] + mus * acc[:, 5]
+    return np.column_stack([acc[:, 1], acc[:, 0], radial, tangential, acc[:, 2], acc[:, 3]])
+
+
+def _off_segment(
+    stack: _Stack,
+    load: Load,
+    locations: list[tuple[int, float]],
+    radii: np.ndarray,
+    lo: float,
+    hi: float,
+) -> np.ndarray:
+    mid = 0.5 * (lo + hi)
+    span = 0.5 * (hi - lo)
+    samples = mid + span * _GAUSS_NODES
+    total = np.zeros((len(locations), 6))
+    for xi, weight in zip(samples, _GAUSS_WEIGHTS):
+        xi = float(xi)
+        if xi < 1e-10:
+            continue
+        bars = stack.radial_bars(xi, load.stress, load.radius, locations)
+        argument = xi * radii
+        circular = j0(argument)
+        first = j1(argument)
+        second = jn(2, argument)
+        factor = (span * weight) * xi
+        total[:, 0] += factor * bars[:, 0] * circular
+        total[:, 1] += factor * bars[:, 1] * first
+        total[:, 2] += factor * bars[:, 2] * circular
+        total[:, 3] += factor * bars[:, 3] * first
+        total[:, 4] += factor * bars[:, 4] * circular
+        total[:, 5] += factor * xi * bars[:, 1] * second
+    return total
+
+
 class _Stack:
     def __init__(self, layers: tuple[Layer, ...]) -> None:
         self.moduli = np.array([layer.modulus for layer in layers], dtype=float)
@@ -139,13 +241,12 @@ class _Stack:
         self.n = len(layers)
         self.unknowns = 4 * (self.n - 1) + 2
 
-    def locate(self, depth: float) -> tuple[int, float]:
-        top = 0.0
-        for index, thickness in enumerate(self.h):
-            if depth <= top + thickness + 1e-12:
-                return index, max(0.0, depth - top)
-            top += thickness
-        return self.n - 1, max(0.0, depth - top)
+    def location(self, layer_number: int, depth: float) -> tuple[int, float]:
+        index = layer_number - 1
+        if not 0 <= index < self.n:
+            raise ValueError(f"layer {layer_number} is outside the structure")
+        top = float(self.h[:index].sum()) if index else 0.0
+        return index, depth - top
 
     def axis_fields(self, xi: float, pressure: float, radius: float, locations: list[tuple[int, float]]) -> np.ndarray:
         coeffs = self._coefficients(xi, pressure, radius)
@@ -162,6 +263,28 @@ class _Stack:
             out[row, 0] = uz
             out[row, 1] = sz
             out[row, 2] = 0.5 * h2
+        return out
+
+    def radial_bars(
+        self,
+        xi: float,
+        pressure: float,
+        radius: float,
+        locations: list[tuple[int, float]],
+    ) -> np.ndarray:
+        coeffs = self._coefficients(xi, pressure, radius)
+        out = np.zeros((len(locations), 5))
+        for row, (layer, local_z) in enumerate(locations):
+            thickness = None if layer == self.n - 1 else float(self.h[layer])
+            nu = float(self.nu[layer])
+            mu = float(self.mu[layer])
+            coeff = coeffs[layer]
+            decay = _decay(xi, local_z, thickness)
+            out[row, 0] = np.dot(_weights("uz", xi, local_z, nu, mu, *decay), coeff)
+            out[row, 1] = np.dot(_weights("ur", xi, local_z, nu, mu, *decay), coeff)
+            out[row, 2] = np.dot(_weights("sz", xi, local_z, nu, mu, *decay), coeff)
+            out[row, 3] = np.dot(_weights("trz", xi, local_z, nu, mu, *decay), coeff)
+            out[row, 4] = np.dot(_weights("H2", xi, local_z, nu, mu, *decay), coeff)
         return out
 
     def _coefficients(self, xi: float, pressure: float, radius: float) -> list[np.ndarray]:

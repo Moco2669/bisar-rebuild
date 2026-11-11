@@ -25,12 +25,12 @@ def _closed(depth: float) -> tuple[float, float, float]:
     return settlement, vertical, radial
 
 
-def _problem(layers: tuple[Layer, ...], depth: float) -> Problem:
+def _problem(layers: tuple[Layer, ...], depth: float, layer: int = 1) -> Problem:
     return Problem(
         "half-space",
         layers,
         (Load(PRESSURE, RADIUS, 0.0, 0.0, 0.0, 0.0),),
-        (QueryPoint(1, 1, 0.0, 0.0, depth),),
+        (QueryPoint(1, layer, 0.0, 0.0, depth),),
     )
 
 
@@ -54,6 +54,7 @@ def test_identical_layers_match_the_half_space():
                 Layer(MODULUS, POISSON, 0.0, 0.0),
             ),
             depth,
+            layer=3,
         )
     )[0]
     assert stacked.displacement.vertical == pytest.approx(single.displacement.vertical, rel=1e-4)

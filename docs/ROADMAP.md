@@ -10,9 +10,9 @@ The manual in `D:\BISAR3\BISAR3.PDF` is the checklist for what a person can do. 
 
 **M1 — Bonded centerline.** `solve` reproduces `tests/fixtures/nrb1_expected.json`: one vertical circular load, four fully bonded layers, six positions on the load axis. `run.bat` prints vertical displacement and the normal stresses for that file. The centerline test passes.
 
-## Next
+**M2 — Several loads.** `solve` reproduces `tests/fixtures/dual_expected.json`: the standard dual wheel, eight positions, including points off a load axis. The combined response is the Cartesian total. `run.bat tests\fixtures\dual.inp` prints it.
 
-**M2 — Several loads.** A second recorded case with two vertical loads, including the standard dual wheel. Responses away from a load axis match the original program to the three digits it prints.
+## Next
 
 **M3 — Shear and slip.** One case with a horizontal shear load, and one case with a non-zero shear spring at an interface. Both match the original program.
 

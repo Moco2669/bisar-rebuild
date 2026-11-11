@@ -54,6 +54,25 @@ class Components:
 
 
 @dataclass(frozen=True)
+class Vector3:
+    x: float
+    y: float
+    z: float
+
+
+@dataclass(frozen=True)
+class Tensor:
+    """Normal and shear components in the fixed Cartesian frame."""
+
+    xx: float
+    yy: float
+    zz: float
+    yz: float = 0.0
+    xz: float = 0.0
+    xy: float = 0.0
+
+
+@dataclass(frozen=True)
 class PointResult:
     position: int
     layer: int
@@ -63,3 +82,6 @@ class PointResult:
     displacement: Components
     stress: Components
     strain: Components
+    total_displacement: Vector3 | None = None
+    total_stress: Tensor | None = None
+    total_strain: Tensor | None = None
