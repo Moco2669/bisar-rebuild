@@ -2,7 +2,9 @@
 
 This repository rebuilds the BISAR pavement calculation as a Python program and checks it against BISAR-PC. The orchestrator does not implement a feature itself. It assigns one of the three agents below, reviews the diff, and runs `pytest`.
 
-Work proceeds in this order:
+The current milestone is in `docs/ROADMAP.md`. Finish that one before opening the next.
+
+Work inside a milestone proceeds in this order:
 
 1. `agents/01-tests-and-docs.md` — a failing or extended test that names the next behavior.
 2. `agents/02-calculation.md` — the solver change that makes that test pass.

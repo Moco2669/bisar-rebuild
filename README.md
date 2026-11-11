@@ -9,8 +9,8 @@ py -m pip install -e ".[dev]"
 py -m pytest
 ```
 
-The solver test is expected to fail until the layered-elastic engine is in place. It is marked as a strict expected failure so the rest of the suite stays green.
+That run checks the bonded centerline against the recorded four-layer case.
 
-Three agents share the work. Their prompts are in `agents/`, and the order they run is in `AGENTS.md`.
+Milestones are in `docs/ROADMAP.md`. The current one is several vertical loads, including a standard dual wheel. Three agents share each milestone. Their prompts are in `agents/`, and the order they run is in `AGENTS.md`.
 
 The Shell manual and the original program stay in `D:\BISAR3` on the machine that has them. They are not part of this repository.

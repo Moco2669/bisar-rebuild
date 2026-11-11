@@ -3,7 +3,7 @@ name = "bisar-rebuild"
 version = "0.1.0"
 description = "Layered-elastic pavement calculations checked against BISAR-PC."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["numpy>=1.26", "scipy>=1.11"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

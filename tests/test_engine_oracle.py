@@ -13,7 +13,6 @@ PROBLEM = parse_input((FIXTURES / "nrb1.inp").read_text(encoding="ascii"))
 EXPECTED = json.loads((FIXTURES / "nrb1_expected.json").read_text(encoding="ascii"))
 
 
-@pytest.mark.xfail(reason="layered-elastic engine is not implemented yet", strict=True)
 def test_nrb1_matches_recorded_centerline():
     results = solve(PROBLEM)
     assert len(results) == len(EXPECTED["points"])
