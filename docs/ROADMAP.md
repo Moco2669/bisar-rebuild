@@ -14,9 +14,9 @@ The manual in `D:\BISAR3\BISAR3.PDF` is the checklist for what a person can do. 
 
 **M3 — Shear and slip.** `solve` reproduces `tests/fixtures/slip_expected.json` (reduced compliance 10.5 m under the top layer) and `tests/fixtures/shear_expected.json` (a 5 kN horizontal load along X on the bonded structure). `run.bat tests\fixtures\shear.inp` prints the Cartesian total, including the shear stresses.
 
-## Next
+**M4 — A calculation screen.** A desktop window edits loads, layers, and positions, with a count for each, runs the calculation, and shows the displacements and stresses from `solve`. `run.bat` opens it. The window is covered by `tests/test_screen.py`.
 
-**M4 — A calculation screen.** One page where a person edits layers, loads, and positions, runs the calculation, and reads the displacements and normal stresses. The page is covered by a test and only displays values from `solve`.
+## Next
 
 **M5 — Projects and reports.** A project can be saved and opened. The same results can be shown as a short block report and as the detailed position report. The standard dual wheel can be placed from the screen.
 

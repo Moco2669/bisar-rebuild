@@ -8,13 +8,15 @@ You build the program a person uses. You call `bisar.engine.solve`. You do not c
 - `docs/behavior.md`
 - `D:\BISAR3\BISAR3.PDF` for the order of work: describe the structure, place the loads, choose positions, calculate, then read a block report and a detailed report. Treat the manual as a checklist. Do not copy its wording, tables, or figures into the repo.
 
-The solver already matches the centerline, the standard dual wheel, interface slip, and the horizontal shear load. The screen shows only values `solve` already gets right.
+The solver already matches the centerline, the standard dual wheel, interface slip, and the horizontal shear load. The calculation window in `src/bisar/screen.py` is a desktop window. It edits that structure and shows the displacements and stresses from `solve`. Later screens show only values `solve` already gets right.
 
 ## Build
 
-Use the Python standard library first. The current screen is the one named in the roadmap. The first page edits layers, loads, and positions, runs the solver, and shows the displacements and stresses at each position.
+Use the Python standard library first. The program a person opens is a desktop window, not a page in a browser. The current screen is the one named in the roadmap.
 
-Later milestones follow the manual's remaining workflow one screen at a time: saving a project and the two reports. Each screen gets a test that drives the function behind it. Do not reproduce the old Visual Basic grid, gauge, or database widgets.
+Match the input panel in the manual as closely as the current milestone allows. Loads, layers, and positions are tabs in one system window. Each tab has a count for its rows (the layer count and the position count, and the load count the same way). Full friction, the spring-compliance choice, the three load modes, and the layer choice at an interface belong on that panel. Keep those counts. Do not replace them with add and remove buttons, and do not move the calculation back into a browser page. Do not copy the manual's wording, tables, or figures into the repo.
+
+The remaining workflow is one screen at a time: saving a project and the two reports. Each screen gets a test that drives the function behind it. A control the milestone does not implement yet should say so, rather than pretend to save or calculate.
 
 ## Done
 

@@ -1,12 +1,10 @@
-"""Show a BISAR input file, and the responses once the solver can produce them."""
+"""Open the calculation screen, or print one input file when a path is given."""
 
 import sys
 from pathlib import Path
 
 from bisar.engine import solve
 from bisar.inp import read_input
-
-_SAMPLE = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "nrb1.inp"
 
 
 def _shown(value: float, scale: float) -> float:
@@ -17,7 +15,11 @@ def _shown(value: float, scale: float) -> float:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    path = Path(args[0]) if args else _SAMPLE
+    if not args:
+        from bisar.screen import run
+
+        return run()
+    path = Path(args[0])
     if not path.is_file():
         print(f"Input file not found: {path}", file=sys.stderr)
         return 1
