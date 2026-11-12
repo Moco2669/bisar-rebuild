@@ -1,4 +1,4 @@
-"""Bonded multi-layer elastic response under circular vertical loads.
+"""Bonded multi-layer elastic response under circular vertical and shear loads.
 
 The Hankel solution follows the Love function used for layered pavements:
 each layer has four coefficients, the half-space has two, and full bond makes
@@ -18,14 +18,10 @@ from bisar.model import Components, Layer, Load, PointResult, Problem, QueryPoin
 
 _BESSEL_ZEROS = jn_zeros(1, 240)
 _GAUSS_NODES, _GAUSS_WEIGHTS = np.polynomial.legendre.leggauss(24)
+_SHEAR_NODES, _SHEAR_WEIGHTS = np.polynomial.legendre.leggauss(48)
 
 
 def solve(problem: Problem) -> tuple[PointResult, ...]:
-    if any(layer.shear_spring != 0.0 for layer in problem.layers):
-        raise NotImplementedError("Interface slip is not implemented yet.")
-    if any(load.shear_stress != 0.0 for load in problem.loads):
-        raise NotImplementedError("Horizontal shear loads are not implemented yet.")
-
     count = len(problem.points)
     displacement = np.zeros((count, 3))
     stress = np.zeros((count, 6))
@@ -44,6 +40,8 @@ def solve(problem: Problem) -> tuple[PointResult, ...]:
             subset = tuple(problem.points[index] for index in off_axis)
             for slot, point, values in zip(off_axis, subset, _off_axis_responses(problem.layers, load, subset)):
                 _add_cylindrical(displacement[slot], stress[slot], point, load, values)
+        if load.shear_stress != 0.0:
+            _add_horizontal(displacement, stress, problem.layers, load, problem.points)
 
     results = []
     for point, disp, comp in zip(problem.points, displacement, stress):
@@ -234,6 +232,7 @@ class _Stack:
         self.moduli = np.array([layer.modulus for layer in layers], dtype=float)
         self.nu = np.array([layer.poisson for layer in layers], dtype=float)
         self.mu = self.moduli / (2.0 * (1.0 + self.nu))
+        self.compliance = np.array([layer.shear_spring for layer in layers], dtype=float)
         thicknesses = [layer.thickness for layer in layers[:-1]]
         if any(h <= 0.0 for h in thicknesses):
             raise ValueError("Only the bottom layer may have zero thickness.")
@@ -305,6 +304,13 @@ class _Stack:
                 factor = scale if component in ("ur", "uz") else 1.0
                 self._put(matrix, row, xi, layer, float(self.h[layer]), component, factor)
                 self._put(matrix, row, xi, layer + 1, 0.0, component, -factor)
+                reduced = float(self.compliance[layer])
+                if component == "ur" and reduced != 0.0:
+                    # ALK is the reduced compliance in metres. The standard compliance
+                    # of the layer above the interface is AK = ALK (1+ν)/E, and the
+                    # radial slip is ur_above - ur_below = -AK τ_rz.
+                    standard = reduced * (1.0 + float(self.nu[layer])) / float(self.moduli[layer])
+                    self._put(matrix, row, xi, layer, float(self.h[layer]), "trz", factor * standard)
                 row += 1
         solved = np.linalg.solve(matrix, rhs)
         coeffs = []
@@ -372,3 +378,271 @@ def _weights(component: str, xi: float, local_z: float, nu: float, mu: float, em
     if component == "H2":
         return stress * np.array([-em, (1.0 + 4.0 * nu - depth) * em, ep, (1.0 + 4.0 * nu + depth) * ep])
     raise ValueError(component)
+
+
+def _add_horizontal(
+    displacement: np.ndarray,
+    stress: np.ndarray,
+    layers: tuple[Layer, ...],
+    load: Load,
+    points: tuple[QueryPoint, ...],
+) -> None:
+    """Add one circular horizontal traction, aimed along ``shear_direction``."""
+    direction = math.radians(load.shear_direction)
+    cosine = math.cos(direction)
+    sine = math.sin(direction)
+    depth = min(max(point.z, 0.0) for point in points)
+    thicknesses = [layer.thickness for layer in layers[:-1]]
+    scale = min([depth, *thicknesses]) if thicknesses else depth
+    limit = 40.0 / max(scale, 1e-3)
+    edges = np.concatenate(([0.0], _BESSEL_ZEROS / load.radius))
+    placed = [_horizontal_place(point, load, cosine, sine) for point in points]
+    for index in range(len(edges) - 1):
+        if edges[index] >= limit:
+            break
+        hi = min(float(edges[index + 1]), limit)
+        mid = 0.5 * (float(edges[index]) + hi)
+        span = 0.5 * (hi - float(edges[index]))
+        for node, weight in zip(_SHEAR_NODES, _SHEAR_WEIGHTS):
+            xi = float(mid + span * node)
+            if xi < 1e-8:
+                continue
+            solved = _shear_coefficients(xi, layers, load.shear_stress, load.radius)
+            factor = span * float(weight) * xi
+            for row, point, place in zip(range(len(points)), points, placed):
+                layer = layers[point.layer - 1]
+                local_z = point.z - _layer_top(layers, point.layer - 1)
+                thickness = None if point.layer == len(layers) else layer.thickness
+                sample = _shear_sample(
+                    xi,
+                    local_z,
+                    thickness,
+                    layer.poisson,
+                    _shear_vector(solved, layers, point.layer - 1),
+                    place,
+                )
+                _rotate_horizontal(displacement[row], stress[row], sample, cosine, sine, factor, layer)
+
+
+def _horizontal_place(point: QueryPoint, load: Load, cosine: float, sine: float) -> tuple[float, float, float]:
+    dx = point.x - load.x
+    dy = point.y - load.y
+    along = dx * cosine + dy * sine
+    across = -dx * sine + dy * cosine
+    return math.hypot(along, across), along, across
+
+
+def _layer_top(layers: tuple[Layer, ...], index: int) -> float:
+    return sum(layer.thickness for layer in layers[:index])
+
+
+def _rotate_horizontal(
+    displacement: np.ndarray,
+    stress: np.ndarray,
+    sample: np.ndarray,
+    cosine: float,
+    sine: float,
+    factor: float,
+    layer: Layer,
+) -> None:
+    """Rotate one shear-frame sample into the fixed frame and add it."""
+    modulus = layer.modulus
+    two_mu = modulus / (1.0 + layer.poisson)
+    ux_s = factor * sample[0] / two_mu
+    uy_s = factor * sample[1] / two_mu
+    uz_s = factor * sample[2] / two_mu
+    xx_s = factor * sample[3]
+    yy_s = factor * sample[4]
+    zz_s = factor * sample[5]
+    yz_s = factor * sample[6]
+    xz_s = factor * sample[7]
+    xy_s = factor * sample[8]
+    displacement[0] += ux_s * cosine - uy_s * sine
+    displacement[1] += ux_s * sine + uy_s * cosine
+    displacement[2] += uz_s
+    cc = cosine * cosine
+    ss = sine * sine
+    sc = sine * cosine
+    stress[0] += cc * xx_s + ss * yy_s - 2.0 * sc * xy_s
+    stress[1] += ss * xx_s + cc * yy_s + 2.0 * sc * xy_s
+    stress[2] += zz_s
+    stress[3] += sine * xz_s + cosine * yz_s
+    stress[4] += cosine * xz_s - sine * yz_s
+    stress[5] += sc * (xx_s - yy_s) + (cc - ss) * xy_s
+
+
+def _shear_sample(
+    xi: float,
+    local_z: float,
+    thickness: float | None,
+    nu: float,
+    coeff: tuple[float, ...],
+    place: tuple[float, float, float],
+) -> np.ndarray:
+    """Cartesian ux, uy, uz*2μ and stresses in the frame where the shear points along X."""
+    ux0, ux2, uz, t0, t2, sz, lap = _shear_fields(xi, local_z, thickness, nu, coeff)
+    radius, along, across = place
+    theta = math.atan2(across, along)
+    c1, s1 = math.cos(theta), math.sin(theta)
+    c2, s2 = math.cos(2.0 * theta), math.sin(2.0 * theta)
+    c3, s3 = math.cos(3.0 * theta), math.sin(3.0 * theta)
+    if radius < 1e-12:
+        b0, b1, b2, b3 = 1.0, 0.0, 0.0, 0.0
+    else:
+        argument = xi * radius
+        b0, b1, b2, b3 = j0(argument), j1(argument), jn(2, argument), jn(3, argument)
+    sxx = (nu * lap - xi * ux0 + 0.5 * xi * ux2) * c1 * b1 - 0.5 * xi * ux2 * c3 * b3
+    syy = (nu * lap + 0.5 * xi * ux2) * c1 * b1 + 0.5 * xi * ux2 * c3 * b3
+    sxy = -0.5 * xi * ux0 * s1 * b1 - 0.5 * xi * ux2 * s3 * b3
+    return np.array(
+        [
+            ux0 * b0 + ux2 * c2 * b2,
+            ux2 * s2 * b2,
+            uz * c1 * b1,
+            sxx,
+            syy,
+            sz * c1 * b1,
+            t2 * s2 * b2,
+            t0 * b0 + t2 * c2 * b2,
+            sxy,
+        ]
+    )
+
+
+def _shear_layout(layers: tuple[Layer, ...]) -> tuple[list[int], list[int], int]:
+    widths = [6 if layer.thickness > 0.0 else 3 for layer in layers]
+    offsets: list[int] = []
+    cursor = 0
+    for width in widths:
+        offsets.append(cursor)
+        cursor += width
+    return widths, offsets, cursor
+
+
+def _shear_vector(solved: np.ndarray, layers: tuple[Layer, ...], layer: int) -> tuple[float, ...]:
+    widths, offsets, _total = _shear_layout(layers)
+    raw = solved[offsets[layer] : offsets[layer] + widths[layer]]
+    if widths[layer] == 6:
+        return tuple(float(value) for value in raw)
+    return (float(raw[0]), float(raw[1]), 0.0, 0.0, float(raw[2]), 0.0)
+
+
+def _shear_coefficients(xi: float, layers: tuple[Layer, ...], shear: float, radius: float) -> np.ndarray:
+    """Solve the layer coefficients for a uniform shear of Hankel amplitude ``shear``."""
+    widths, offsets, total = _shear_layout(layers)
+    matrix = np.zeros((total, total))
+    rhs = np.zeros(total)
+    argument = xi * radius
+    load = shear * radius * radius * 0.5 if argument < 1e-8 else shear * radius * j1(argument) / xi
+    rhs[0] = -load
+    stations = [(0, 0.0)]
+    for layer, item in enumerate(layers[:-1]):
+        stations.append((layer, item.thickness))
+        stations.append((layer + 1, 0.0))
+    columns = [
+        _shear_columns(xi, layers, layer, local_z, widths[layer]) for layer, local_z in stations
+    ]
+    # Surface traction: tau_xz mean, tau_xz quadrupole, sigma_z.
+    for component, row in (("t0", 0), ("t2", 1), ("sz", 2)):
+        matrix[row, offsets[0] : offsets[0] + widths[0]] = columns[0][_SHEAR_SLOT[component]]
+    balance = layers[0].modulus / (2.0 * (1.0 + layers[0].poisson)) * xi
+    row = 3
+    station = 1
+    for layer in range(len(layers) - 1):
+        above = columns[station]
+        below = columns[station + 1]
+        station += 2
+        for component in ("ux0", "ux2", "uz", "t0", "t2", "sz"):
+            slot = _SHEAR_SLOT[component]
+            factor = balance if component in ("ux0", "ux2", "uz") else 1.0
+            matrix[row, offsets[layer] : offsets[layer] + widths[layer]] = factor * above[slot]
+            matrix[row, offsets[layer + 1] : offsets[layer + 1] + widths[layer + 1]] = -factor * below[slot]
+            row += 1
+    return np.linalg.solve(matrix, rhs)
+
+
+_SHEAR_SLOT = {"ux0": 0, "ux2": 1, "uz": 2, "t0": 3, "t2": 4, "sz": 5}
+
+
+def _shear_columns(
+    xi: float,
+    layers: tuple[Layer, ...],
+    layer: int,
+    local_z: float,
+    width: int,
+) -> list[np.ndarray]:
+    """Each returned row is one field sampled on every unknown of this layer."""
+    item = layers[layer]
+    thickness = None if item.thickness == 0.0 else item.thickness
+    samples = []
+    for column in range(width):
+        coeff = [0.0] * 6
+        if width == 6:
+            coeff[column] = 1.0
+        elif column < 2:
+            coeff[column] = 1.0
+        else:
+            coeff[4] = 1.0
+        samples.append(_shear_fields(xi, local_z, thickness, item.poisson, tuple(coeff)))
+    stacked = np.array(samples)
+    two_mu = item.modulus / (1.0 + item.poisson)
+    stacked[:, 0:3] /= two_mu
+    return [stacked[:, slot] for slot in range(6)]
+
+
+def _amp_add(left: tuple[float, float, float, float], right: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    return (left[0] + right[0], left[1] + right[1], left[2] + right[2], left[3] + right[3])
+
+
+def _amp_scale(value: tuple[float, float, float, float], factor: float) -> tuple[float, float, float, float]:
+    return (factor * value[0], factor * value[1], factor * value[2], factor * value[3])
+
+
+def _amp_deriv(value: tuple[float, float, float, float], xi: float) -> tuple[float, float, float, float]:
+    const, slope, growing, growing_slope = value
+    return (slope - xi * const, -xi * slope, growing_slope + xi * growing, xi * growing_slope)
+
+
+def _amp_eval(value: tuple[float, float, float, float], xi: float, local_z: float, thickness: float | None) -> float:
+    const, slope, growing, growing_slope = value
+    result = (const + slope * local_z) * math.exp(-xi * local_z)
+    if thickness is not None:
+        result += (growing + growing_slope * local_z) * math.exp(-xi * (thickness - local_z))
+    return result
+
+
+def _shear_fields(
+    xi: float,
+    local_z: float,
+    thickness: float | None,
+    nu: float,
+    coeff: tuple[float, ...],
+) -> tuple[float, float, float, float, float, float, float]:
+    """Hankel amplitudes of the Galerkin shear field.
+
+    The x-component is axisymmetric and the z-component varies as cos θ.
+    The constant part of the z-component is omitted: it repeats the x-component.
+    Returned values are 2μ ux (orders 0 and 2), 2μ uz (order 1), τxz (orders 0 and 2),
+    σz (order 1), and the dilatation potential used by the normal stresses.
+    """
+    horizontal = (coeff[0], coeff[1], coeff[2], coeff[3])
+    vertical = (0.0, coeff[4], 0.0, coeff[5])
+    lap_x = _amp_add(_amp_deriv(_amp_deriv(horizontal, xi), xi), _amp_scale(horizontal, -(xi * xi)))
+    lap_z = _amp_add(_amp_deriv(_amp_deriv(vertical, xi), xi), _amp_scale(vertical, -(xi * xi)))
+    div = _amp_add(_amp_scale(horizontal, -xi), _amp_deriv(vertical, xi))
+    ux0 = _amp_add(_amp_scale(lap_x, 2.0 * (1.0 - nu)), _amp_scale(div, -(xi / 2.0)))
+    ux2 = _amp_scale(div, xi / 2.0)
+    uz = _amp_add(_amp_scale(lap_z, 2.0 * (1.0 - nu)), _amp_scale(_amp_deriv(div, xi), -1.0))
+    two_t0 = _amp_add(_amp_deriv(ux0, xi), _amp_scale(uz, xi / 2.0))
+    two_t2 = _amp_add(_amp_deriv(ux2, xi), _amp_scale(uz, -(xi / 2.0)))
+    lap_div = _amp_add(_amp_deriv(_amp_deriv(div, xi), xi), _amp_scale(div, -(xi * xi)))
+    sz = _amp_add(_amp_scale(lap_div, nu), _amp_deriv(uz, xi))
+    return (
+        _amp_eval(ux0, xi, local_z, thickness),
+        _amp_eval(ux2, xi, local_z, thickness),
+        _amp_eval(uz, xi, local_z, thickness),
+        0.5 * _amp_eval(two_t0, xi, local_z, thickness),
+        0.5 * _amp_eval(two_t2, xi, local_z, thickness),
+        _amp_eval(sz, xi, local_z, thickness),
+        _amp_eval(lap_div, xi, local_z, thickness),
+    )

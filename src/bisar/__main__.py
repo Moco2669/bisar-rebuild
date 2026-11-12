@@ -49,6 +49,11 @@ def main(argv: list[str] | None = None) -> int:
             _shown(total_stress.yy, total_stress.zz),
             total_stress.zz,
         )
+        yz, xz, xy = (
+            _shown(total_stress.yz, total_stress.zz),
+            _shown(total_stress.xz, total_stress.zz),
+            _shown(total_stress.xy, total_stress.zz),
+        )
         print(
             f"  position {result.position}: ux={ux:.4E}"
             f"  uy={uy:.4E}"
@@ -56,6 +61,9 @@ def main(argv: list[str] | None = None) -> int:
             f"  xx={xx:.4E}"
             f"  yy={yy:.4E}"
             f"  zz={zz:.4E}"
+            f"  yz={yz:.4E}"
+            f"  xz={xz:.4E}"
+            f"  xy={xy:.4E}"
         )
     return 0
 

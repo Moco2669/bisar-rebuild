@@ -1,0 +1,12 @@
+{
+  "note": "Cartesian totals from one BISAR-PC 2.0 run with a reduced shear-spring compliance of 10.5 m under the top layer. Four significant figures, as printed.",
+  "points": [
+    {"position": 1, "layer": 1, "x": 0.0, "y": 0.0, "z": 0.3, "ux": 0.0, "uy": 0.0, "uz": 5.808e-5, "xx": 2.076e5, "yy": 2.076e5, "zz": -3.883e4, "yz": 0.0, "xz": 0.0, "exx": 2.971e-5, "eyy": 2.971e-5, "ezz": -3.683e-5},
+    {"position": 2, "layer": 2, "x": 0.0, "y": 0.0, "z": 0.3, "ux": 0.0, "uy": 0.0, "uz": 5.808e-5, "xx": -3.743e4, "yy": -3.743e4, "zz": -3.883e4, "yz": 0.0, "xz": 0.0, "exx": -1.074e-5, "eyy": -1.074e-5, "ezz": -1.262e-5},
+    {"position": 3, "layer": 1, "x": 0.2, "y": 0.0, "z": 0.3, "ux": 4.315e-6, "uy": 0.0, "uz": 5.320e-5, "xx": 8.731e4, "yy": 1.310e5, "zz": -2.128e4, "yz": 0.0, "xz": -2.130e3, "exx": 9.782e-6, "eyy": 2.157e-5, "ezz": -1.954e-5},
+    {"position": 4, "layer": 2, "x": 0.2, "y": 0.0, "z": 0.3, "ux": -1.724e-6, "uy": 0.0, "uz": 5.320e-5, "xx": -2.100e4, "yy": -2.342e4, "zz": -2.128e4, "yz": 0.0, "xz": -2.130e3, "exx": -5.356e-6, "eyy": -8.620e-6, "ezz": -5.732e-6},
+    {"position": 5, "layer": 1, "x": 0.0, "y": 0.2, "z": 0.3, "ux": 0.0, "uy": 4.315e-6, "uz": 5.320e-5, "xx": 1.310e5, "yy": 8.731e4, "zz": -2.128e4, "yz": -2.130e3, "xz": 0.0, "exx": 2.157e-5, "eyy": 9.782e-6, "ezz": -1.954e-5},
+    {"position": 6, "layer": 2, "x": 0.0, "y": 0.2, "z": 0.3, "ux": 0.0, "uy": -1.724e-6, "uz": 5.320e-5, "xx": -2.342e4, "yy": -2.100e4, "zz": -2.128e4, "yz": -2.130e3, "xz": 0.0, "exx": -8.620e-6, "eyy": -5.356e-6, "ezz": -5.732e-6},
+    {"position": 7, "layer": 3, "x": 0.0, "y": 0.0, "z": 0.65, "ux": 0.0, "uy": 0.0, "uz": 5.024e-5, "xx": 1.519e4, "yy": 1.519e4, "zz": -1.047e4, "yz": 0.0, "xz": 0.0, "exx": 1.692e-5, "eyy": 1.692e-5, "ezz": -2.638e-5}
+  ]
+}

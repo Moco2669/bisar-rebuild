@@ -12,9 +12,9 @@ The manual in `D:\BISAR3\BISAR3.PDF` is the checklist for what a person can do. 
 
 **M2 — Several loads.** `solve` reproduces `tests/fixtures/dual_expected.json`: the standard dual wheel, eight positions, including points off a load axis. The combined response is the Cartesian total. `run.bat tests\fixtures\dual.inp` prints it.
 
-## Next
+**M3 — Shear and slip.** `solve` reproduces `tests/fixtures/slip_expected.json` (reduced compliance 10.5 m under the top layer) and `tests/fixtures/shear_expected.json` (a 5 kN horizontal load along X on the bonded structure). `run.bat tests\fixtures\shear.inp` prints the Cartesian total, including the shear stresses.
 
-**M3 — Shear and slip.** One case with a horizontal shear load, and one case with a non-zero shear spring at an interface. Both match the original program.
+## Next
 
 **M4 — A calculation screen.** One page where a person edits layers, loads, and positions, runs the calculation, and reads the displacements and normal stresses. The page is covered by a test and only displays values from `solve`.
 
