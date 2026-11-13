@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BISAR calculate</title>
+<style>
+  :root {
+    --ink: #1c1915;
+    --muted: #5c564c;
+    --line: #d9d2c5;
+    --paper: #f6f3ec;
+    --card: #fffdf8;
+    --accent: #8c2f1b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 15px/1.45 "Segoe UI", sans-serif;
+  }
+  header, main { max-width: 1080px; margin: 0 auto; padding: 24px 20px; }
+  header { padding-bottom: 0; }
+  h1 { font-size: 28px; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.02em; }
+  p.lead { margin: 0; color: var(--muted); max-width: 62ch; }
+  section {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 16px 12px;
+    margin-top: 16px;
+  }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 4px 6px; vertical-align: middle; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  input, select {
+    width: 100%;
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font: inherit;
+    color: inherit;
+  }
+  button {
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: white; font-weight: 650; }
+  button.ghost { background: transparent; color: var(--muted); }
+  .row-actions { display: flex; gap: 8px; margin-top: 8px; }
+  #status { min-height: 1.4em; margin: 12px 0 0; color: var(--accent); }
+  .result { margin-top: 14px; }
+  .result h3 { margin: 0 0 6px; font-size: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 16px; }
+  .grid span { display: block; color: var(--muted); font-size: 12px; }
+  .grid strong { font-variant-numeric: tabular-nums; font-weight: 600; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>BISAR calculate</h1>
+  <p class="lead">Stresses, strains and displacements in a layered elastic pavement. Same inputs as the BISAR Calculate action: circular vertical loads, optional slip between layers, and positions in Cartesian coordinates with depth positive downward.</p>
+</header>
+<main>
+  <section>
+    <h2>Layers</h2>
+    <table id="layers">
+      <thead>
+        <tr>
+          <th>Modulus, MPa</th><th>Poisson</th><th>Thickness, m</th><th>Reduced spring compliance, m</th><th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="row-actions"><button type="button" class="ghost" id="add-layer">Add layer</button></div>
+  </section>
+  <section>
+    <h2>Loads</h2>
+    <table id="loads">
+      <thead>
+        <tr>
+          <th>Mode</th><th>Load, kN</th><th>Stress, MPa</th><th>Radius, m</th><th>X, m</th><th>Y, m</th><th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="row-actions"><button type="button" class="ghost" id="add-load">Add load</button></div>
+  </section>
+  <section>
+    <h2>Positions</h2>
+    <table id="positions">
+      <thead>
+        <tr><th>X, m</th><th>Y, m</th><th>Z, m</th><th>Layer</th><th></th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="row-actions">
+      <button type="button" class="ghost" id="add-position">Add position</button>
+      <button type="button" class="primary" id="calculate">Calculate</button>
+    </div>
+    <p id="status"></p>
+  </section>
+  <div id="results"></div>
+</main>
+<script>
+const sampleLayers = [
+  [5000, 0.35, 0.30, 10.5],
+  [1000, 0.35, 0.20, 0],
+  [800, 0.35, 0.15, 0],
+  [200, 0.35, "", 0]
+];
+const samplePositions = [
+  [0, 0, 0.30, 1],
+  [0, 0, 0.30, 2],
+  [0.20, 0, 0.30, 1],
+  [0.20, 0, 0.30, 2],
+  [0, 0.20, 0.30, 1],
+  [0, 0.20, 0.30, 2],
+  [0, 0, 0.65, 3]
+];
+
+function cell(value, name) {
+  const input = document.createElement("input");
+  input.value = value;
+  input.dataset.name = name;
+  return input;
+}
+function removeButton(onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ghost";
+  button.textContent = "Remove";
+  button.addEventListener("click", onClick);
+  return button;
+}
+function addLayer(values, halfspace) {
+  const body = document.querySelector("#layers tbody");
+  const tr = document.createElement("tr");
+  ["modulus_mpa", "poisson", "thickness_m", "alk_m"].forEach((name, i) => {
+    const td = document.createElement("td");
+    const input = cell(values[i], name);
+    if (name === "thickness_m" && halfspace) {
+      input.disabled = true;
+      input.placeholder = "half-space";
+    }
+    td.appendChild(input);
+    tr.appendChild(td);
+  });
+  const td = document.createElement("td");
+  td.appendChild(removeButton(() => { tr.remove(); markHalfspace(); }));
+  tr.appendChild(td);
+  body.appendChild(tr);
+  markHalfspace();
+}
+function markHalfspace() {
+  const rows = [...document.querySelectorAll("#layers tbody tr")];
+  rows.forEach((row, index) => {
+    const thickness = row.querySelector("[data-name=thickness_m]");
+    const alk = row.querySelector("[data-name=alk_m]");
+    const last = index === rows.length - 1;
+    if (last) {
+      if (!thickness.disabled) {
+        thickness.dataset.saved = thickness.value;
+        alk.dataset.saved = alk.value;
+      }
+      thickness.disabled = true;
+      thickness.value = "";
+      thickness.placeholder = "half-space";
+      alk.disabled = true;
+      alk.value = "0";
+      return;
+    }
+    thickness.disabled = false;
+    thickness.placeholder = "";
+    alk.disabled = false;
+    if (thickness.dataset.saved !== undefined) {
+      thickness.value = thickness.dataset.saved;
+      delete thickness.dataset.saved;
+    }
+    if (alk.dataset.saved !== undefined) {
+      alk.value = alk.dataset.saved;
+      delete alk.dataset.saved;
+    }
+  });
+}
+function addLoad() {
+  const body = document.querySelector("#loads tbody");
+  const tr = document.createElement("tr");
+  const mode = document.createElement("select");
+  mode.dataset.name = "mode";
+  [["stress-radius", "Stress and radius"], ["load-radius", "Load and radius"], ["stress-load", "Stress and load"]].forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    mode.appendChild(option);
+  });
+  mode.value = "stress-radius";
+  const modeCell = document.createElement("td");
+  modeCell.appendChild(mode);
+  tr.appendChild(modeCell);
+  [["load_kn", ""], ["stress_mpa", "0.577433"], ["radius_m", "0.105"], ["x_m", "0"], ["y_m", "0"]].forEach(([name, value]) => {
+    const td = document.createElement("td");
+    td.appendChild(cell(value, name));
+    tr.appendChild(td);
+  });
+  const td = document.createElement("td");
+  td.appendChild(removeButton(() => tr.remove()));
+  tr.appendChild(td);
+  body.appendChild(tr);
+}
+function addPosition(values) {
+  const body = document.querySelector("#positions tbody");
+  const tr = document.createElement("tr");
+  ["x_m", "y_m", "z_m", "layer"].forEach((name, i) => {
+    const td = document.createElement("td");
+    td.appendChild(cell(values[i], name));
+    tr.appendChild(td);
+  });
+  const td = document.createElement("td");
+  td.appendChild(removeButton(() => tr.remove()));
+  tr.appendChild(td);
+  body.appendChild(tr);
+}
+function readTable(selector) {
+  return [...document.querySelectorAll(selector + " tbody tr")].map(row => {
+    const data = {};
+    row.querySelectorAll("input, select").forEach(input => {
+      if (!input.disabled) data[input.dataset.name] = input.value;
+    });
+    return data;
+  });
+}
+function show(results) {
+  const root = document.querySelector("#results");
+  root.innerHTML = "";
+  const labels = [
+    ["ur", "Radial displacement, m"], ["uz", "Vertical displacement, m"],
+    ["sr", "Radial stress, Pa"], ["st", "Tangential stress, Pa"], ["sz", "Vertical stress, Pa"],
+    ["trz", "Radial/vertical shear, Pa"],
+    ["er", "Radial strain"], ["et", "Tangential strain"], ["ez", "Vertical strain"],
+    ["erz", "Radial/vertical shear strain"]
+  ];
+  results.forEach(result => {
+    const section = document.createElement("section");
+    section.className = "result";
+    const title = document.createElement("h3");
+    title.textContent = `Position ${result.position} · layer ${result.layer} · z = ${result.z} m`;
+    section.appendChild(title);
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    labels.forEach(([key, label]) => {
+      const block = document.createElement("div");
+      const span = document.createElement("span");
+      span.textContent = label;
+      const strong = document.createElement("strong");
+      strong.textContent = result.cylindrical[key];
+      block.append(span, strong);
+      grid.appendChild(block);
+    });
+    const energy = document.createElement("div");
+    energy.innerHTML = `<span>Strain energy</span><strong> ${result.strain_energy} J/m³</strong> · distortion <strong>${result.distortion_energy}</strong>`;
+    section.append(grid, energy);
+    const principals = document.createElement("p");
+    const names = ["Maximum", "Minimax", "Minimum"];
+    principals.textContent = result.principals.map((item, i) =>
+      `${names[i]} normal stress ${item.stress} Pa, strain ${item.strain}`
+    ).join(" · ");
+    section.appendChild(principals);
+    root.appendChild(section);
+  });
+}
+document.querySelector("#add-layer").addEventListener("click", () => addLayer(["", 0.35, "", 0], false));
+document.querySelector("#add-load").addEventListener("click", addLoad);
+document.querySelector("#add-position").addEventListener("click", () => addPosition([0, 0, 0, "auto"]));
+document.querySelector("#calculate").addEventListener("click", async () => {
+  const status = document.querySelector("#status");
+  status.textContent = "Calculating…";
+  const layers = readTable("#layers").map((row, index, all) => ({
+    ...row,
+    halfspace: index === all.length - 1
+  }));
+  try {
+    const response = await fetch("/api/calculate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        layers,
+        loads: readTable("#loads"),
+        positions: readTable("#positions")
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Calculation failed");
+    status.textContent = `${payload.results.length} position${payload.results.length === 1 ? "" : "s"} calculated.`;
+    show(payload.results);
+  } catch (error) {
+    status.textContent = error.message;
+  }
+});
+sampleLayers.forEach((row, index) => addLayer(row, index === sampleLayers.length - 1));
+addLoad();
+samplePositions.forEach(addPosition);
+</script>
+</body>
+</html>
