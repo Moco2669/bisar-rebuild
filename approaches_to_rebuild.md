@@ -1,0 +1,13 @@
+There are three workable ways to get the original Calculate numbers. They differ in whether the 16-bit program still runs, and in what “bit for bit” is measured against.
+
+The sample report is produced by the DOS engine, BISAR.EXE (the page header is BISAR-PC 2.0, 1995). The Windows DLL carries the same integrator. The printed report keeps four significant figures, so it cannot prove that two doubles are identical. Bit-for-bit means the values before that rounding, and those were computed on the 8087 in 80-bit registers.
+
+Run the original engine. A new screen writes the same input file the Calculate button writes, and winevdm runs BISAR.EXE (or the DLL, if that is what the button actually calls). The numbers match because they are the same instructions, including the 80-bit rounding. This is the short path, and it covers the rough and smooth procedures, slip, and shear as soon as the input file does. The result still depends on a 16-bit emulator and on shipping the Shell binary. It is a new front end on the old kernel, not a new kernel.
+
+Translate the integrator into new code. Disassemble the quadrature loop, lift the Bessel-zero table and the Gauss weights, and replay the arithmetic in the same order. The original program stays only as the test: same input, compare full-precision results, fix the next mismatch. At the end the emulator is gone. This is the long path. The 80-bit registers have to be reproduced, or the last bits will differ even when the formulas match. Any missed branch (the “smooth procedure”, a step-size cutoff, shear) shows up only on a case that hits it.
+
+Keep the original code, but only the numeric kernel. The new program loads the 16-bit machine code and executes that slice on an x87-accurate emulator, with a new interface around it. The arithmetic stays bit-identical without rewriting FORTRAN. You still ship emulator plus binary, and you have to find the exact entry, the segment setup, and the input block the routine expects. That is less work than a full translation and more work than launching BISAR.EXE as a whole program.
+
+A re-derived solver, which is what is in the folder now, is a fourth option only if four significant figures are enough. It will not become bit-identical by tightening the integral.
+
+If the goal is identical numbers and the old executable may be called, run BISAR.EXE and build the new screen around that. If the old executable has to disappear, the translation is the real project, and the emulator is how you check it until the last bits agree.
